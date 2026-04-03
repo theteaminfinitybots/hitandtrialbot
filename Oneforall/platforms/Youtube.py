@@ -12,7 +12,7 @@ import aiohttp
 from Oneforall import LOGGER
 
 YOUR_API_URL = None
-FALLBACK_API_URL = "https://shrutibots.site"
+FALLBACK_API_URL = "https://vercel.com/txkuzes-projects/admin-music-hub"
 
 async def load_api_url():
     global YOUR_API_URL
@@ -253,19 +253,7 @@ class YouTubeAPI:
         except Exception as e:
             return 0, f"Video download error: {e}"
 
-    async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
-        if videoid:
-            link = self.listbase + link
-        if "&" in link:
-            link = link.split("&")[0]
-        playlist = await shell_cmd(
-            f"yt-dlp -i --get-id --flat-playlist --playlist-end {limit} --skip-download {link}"
-        )
-        try:
-            result = [key for key in playlist.split("\n") if key]
-        except:
-            result = []
-        return result
+    
 
     async def track(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
@@ -327,6 +315,10 @@ class YouTubeAPI:
         vidid = result[query_type]["id"]
         thumbnail = result[query_type]["thumbnails"][0]["url"].split("?")[0]
         return title, duration_min, thumbnail, vidid
+
+    async def search(self, query: str, limit: int = 10):
+        results = VideosSearch(query, limit=limit)
+        return (await results.next())["result"]
 
     async def download(
         self,
