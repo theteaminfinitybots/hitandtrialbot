@@ -1,25 +1,29 @@
 from pyrogram.enums import ParseMode
-
-from config import LOGGER_ID
 from Oneforall import app
 from Oneforall.utils.database import is_on_off
-
+from config import LOGGER_ID
 
 async def play_logs(message, streamtype):
     if await is_on_off(2):
         logger_text = f"""<blockquote>
-<b>{app.mention} ᴘʟᴀʏ ʟᴏɢ</b>
+<b>ᴍᴜsɪᴄ ʀᴇᴄᴏʀᴅs</b>
 
-<b>ᴄʜᴀᴛ ɪᴅ :</b> <code>{message.chat.id}</code>
-<b>ᴄʜᴀᴛ ɴᴀᴍᴇ :</b> {message.chat.title}
-<b>ᴄʜᴀᴛ ᴜsᴇʀɴᴀᴍᴇ :</b> @{message.chat.username}
+<b>• ɪɴǫᴜɪʀʏ ⌯ </b> {message.text.split(None, 1)[1]}
+<b>• sᴏᴜʀᴄᴇ ⌯ </b> {streamtype}
 
-<b>ᴜsᴇʀ ɪᴅ :</b> <code>{message.from_user.id}</code>
-<b>ɴᴀᴍᴇ :</b> {message.from_user.mention}
-<b>ᴜsᴇʀɴᴀᴍᴇ :</b> @{message.from_user.username}
+<b>ᴀʙᴏᴜᴛ ᴄʜᴀᴛ - </b> 
 
-<b>ǫᴜᴇʀʏ :</b> {message.text.split(None, 1)[1]}
-<b>sᴛʀᴇᴀᴍᴛʏᴘᴇ :</b> {streamtype}</blockquote>"""
+<b>↬ ᴅᴇsɪɢɴᴀᴛɪᴏɴ ⌯ </b> {message.chat.title}
+<b>↬ ɪᴅᴇɴᴛɪғɪᴇʀ ⌯ </b> <code>{message.chat.id}</code>
+<b>↬ ᴄʜᴀᴛ ʜᴀɴᴅʟᴇ ⌯ </b> @{message.chat.username}
+
+<b>ᴜsᴇʀ ᴅᴀᴛᴀ - </b>
+
+<b>↬ ɴᴀᴍᴇ ⌯ </b> {message.from_user.mention}
+<b>↬ ɪᴅᴇɴᴛɪғɪᴇʀ ⌯ </b> <code>{message.from_user.id}</code>
+<b>↬ ʜᴀɴᴅʟᴇ ⌯ </b> @{message.from_user.username}<blockquote>"""
+
+        # Send log to the primary log channel
         if message.chat.id != LOGGER_ID:
             try:
                 await app.send_message(
@@ -28,6 +32,7 @@ async def play_logs(message, streamtype):
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
                 )
-            except:
-                pass
-        return
+            except Exception as e:
+                print(f"Failed to send log to LOGGER_ID: {e}")
+
+        
