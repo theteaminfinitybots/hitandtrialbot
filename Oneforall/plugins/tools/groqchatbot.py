@@ -2,7 +2,7 @@ import os
 import asyncio
 from pyrogram import filters
 from pyrogram.enums import ChatAction
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import Message
 from Oneforall import app
 from groq import Groq
 
@@ -22,51 +22,29 @@ def clean_text(message: Message) -> str:
     return text
 
 
-# ─── TOGGLE COMMAND ─────────────────────────────────────────
+# ─── CHATBOT TOGGLE COMMAND ─────────────────────────────────
 
 @app.on_message(filters.command("chatbot") & filters.group)
 async def chatbot_toggle(client, message: Message):
     chat_id = message.chat.id
     args = message.command
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ Enable", callback_data="chatbot_on"),
-            InlineKeyboardButton("❌ Disable", callback_data="chatbot_off"),
-        ]
-    ])
-
     # If user typed /chatbot on/off
     if len(args) > 1:
         if args[1].lower() == "on":
             CHATBOT_STATUS[chat_id] = True
             return await message.reply_text("🤖 Chatbot enabled in this chat.")
+
         elif args[1].lower() == "off":
             CHATBOT_STATUS[chat_id] = False
             return await message.reply_text("🤖 Chatbot disabled in this chat.")
 
-    # Default: show buttons
+    # Default help message
     await message.reply_text(
-        "⚙️ **Chatbot Settings**\nChoose an option:",
-        reply_markup=keyboard
+        "👋 Hey!\n\nUse:\n"
+        "• `/chatbot on` → Enable chatbot\n"
+        "• `/chatbot off` → Disable chatbot"
     )
-
-
-# ─── CALLBACK HANDLER ──────────────────────────────────────
-
-@app.on_callback_query(filters.regex("^chatbot_"))
-async def chatbot_buttons(client, query: CallbackQuery):
-    chat_id = query.message.chat.id
-
-    if query.data == "chatbot_on":
-        CHATBOT_STATUS[chat_id] = True
-        await query.answer("Enabled ✅", show_alert=False)
-        await query.edit_message_text("🤖 Chatbot has been enabled.")
-
-    elif query.data == "chatbot_off":
-        CHATBOT_STATUS[chat_id] = False
-        await query.answer("Disabled ❌", show_alert=False)
-        await query.edit_message_text("🤖 Chatbot has been disabled.")
 
 
 # ─── CHATBOT HANDLER ───────────────────────────────────────
@@ -76,7 +54,7 @@ async def groq_chat_handler(client, message: Message):
     chat_id = message.chat.id
 
     # Check if chatbot is enabled
-    if not CHATBOT_STATUS.get(chat_id, False):
+    if CHATBOT_STATUS.get(chat_id) is not True:
         return
 
     text = clean_text(message)
