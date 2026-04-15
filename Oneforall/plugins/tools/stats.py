@@ -1,12 +1,20 @@
 import platform
+import asyncio
 from sys import version as pyver
+from io import BytesIO
+import time
 
 import psutil
-from pyrogram import __version__ as pyrover
-from pyrogram import filters
+import matplotlib.pyplot as plt
+
+from pyrogram import __version__ as pyrover, filters
 from pyrogram.errors import MessageIdInvalid
-from pyrogram.types import InputMediaPhoto, Message
-from pytgcalls.__version__ import __version__ as pytgver
+from pyrogram.types import InputMediaPhoto, Message, CallbackQuery
+
+try:
+    from pytgcalls import __version__ as pytgver
+except:
+    pytgver = "Unknown"
 
 import config
 from config import BANNED_USERS
@@ -24,10 +32,29 @@ from Oneforall.utils.decorators.language import language, languageCB
 from Oneforall.utils.inline.stats import back_stats_buttons, stats_buttons
 
 
+async def generate_cpu_graph():
+    usage = []
+    for _ in range(10):
+        usage.append(psutil.cpu_percent(interval=0.2))
+
+    plt.figure()
+    plt.plot(usage)
+    plt.title("CPU Usage (%) - Live")
+    plt.xlabel("Time")
+    plt.ylabel("Usage %")
+
+    buffer = BytesIO()
+    plt.savefig(buffer, format="png")
+    plt.close()
+    buffer.seek(0)
+    return buffer
+
+
 @app.on_message(filters.command(["stats", "gstats"]) & filters.group & ~BANNED_USERS)
 @language
 async def stats_global(client, message: Message, _):
-    upl = stats_buttons(_, True if message.from_user.id in SUDOERS else False)
+    upl = stats_buttons(_, message.from_user.id in SUDOERS)
+
     await message.reply_photo(
         photo=config.STATS_IMG_URL,
         caption=_["gstats_2"].format(app.mention),
@@ -37,9 +64,10 @@ async def stats_global(client, message: Message, _):
 
 @app.on_callback_query(filters.regex("stats_back") & ~BANNED_USERS)
 @languageCB
-async def home_stats(client, CallbackQuery, _):
-    upl = stats_buttons(_, True if CallbackQuery.from_user.id in SUDOERS else False)
-    await CallbackQuery.edit_message_text(
+async def home_stats(client, query: CallbackQuery, _):
+    upl = stats_buttons(_, query.from_user.id in SUDOERS)
+
+    await query.edit_message_text(
         text=_["gstats_2"].format(app.mention),
         reply_markup=upl,
     )
@@ -47,69 +75,93 @@ async def home_stats(client, CallbackQuery, _):
 
 @app.on_callback_query(filters.regex("TopOverall") & ~BANNED_USERS)
 @languageCB
-async def overall_stats(client, CallbackQuery, _):
-    await CallbackQuery.answer()
+async def overall_stats(client, query: CallbackQuery, _):
+    await query.answer()
+
     upl = back_stats_buttons(_)
-    try:
-        await CallbackQuery.answer()
-    except:
-        pass
-    await CallbackQuery.edit_message_text(_["gstats_1"].format(app.mention))
-    served_chats = len(await get_served_chats())
-    served_users = len(await get_served_users())
-    total_queries = await get_queries()
+    await query.edit_message_text(_["gstats_1"].format(app.mention))
+
+    served_chats, served_users, total_queries = await asyncio.gather(
+        get_served_chats(),
+        get_served_users(),
+        get_queries(),
+    )
+
     text = _["gstats_3"].format(
         app.mention,
         len(assistants),
         len(BANNED_USERS),
-        served_chats,
-        served_users,
+        len(served_chats),
+        len(served_users),
         total_queries,
         len(ALL_MODULES),
         len(SUDOERS),
         config.AUTO_LEAVING_ASSISTANT,
         config.DURATION_LIMIT_MIN,
     )
-    med = InputMediaPhoto(media=config.STATS_IMG_URL, caption=text)
+
+    media = InputMediaPhoto(media=config.STATS_IMG_URL, caption=text)
+
     try:
-        await CallbackQuery.edit_message_media(media=med, reply_markup=upl)
+        await query.edit_message_media(media=media, reply_markup=upl)
     except MessageIdInvalid:
-        await CallbackQuery.message.reply_photo(
-            photo=config.STATS_IMG_URL, caption=text, reply_markup=upl
+        await query.message.reply_photo(
+            photo=config.STATS_IMG_URL,
+            caption=text,
+            reply_markup=upl,
         )
 
 
-@app.on_callback_query(filters.regex("bot_stats_sudo"))
+@app.on_callback_query(filters.regex("bot_stats_sudo") & ~BANNED_USERS)
 @languageCB
-async def bot_stats(client, CallbackQuery, _):
-    if CallbackQuery.from_user.id not in SUDOERS:
-        return await CallbackQuery.answer(_["gstats_4"], show_alert=True)
+async def bot_stats(client, query: CallbackQuery, _):
+    if query.from_user.id not in SUDOERS:
+        return await query.answer(_["gstats_4"], show_alert=True)
+
+    await query.answer()
     upl = back_stats_buttons(_)
+
+    await query.edit_message_text(_["gstats_1"].format(app.mention))
+
+    tasks = await asyncio.gather(
+        get_served_chats(),
+        get_served_users(),
+        get_sudoers(),
+    )
+
+    served_chats = len(tasks[0])
+    served_users = len(tasks[1])
+    sudoers_count = len(tasks[2])
+
+    p_core = psutil.cpu_count(logical=False) or 0
+    t_core = psutil.cpu_count(logical=True) or 0
+
+    ram = f"{round(psutil.virtual_memory().total / (1024.0**3), 2)} GB"
+
+    cpu_percent = psutil.cpu_percent(interval=0.5)
+
+    cpu_freq = "Unavailable"
     try:
-        await CallbackQuery.answer()
+        freq = psutil.cpu_freq()
+        if freq and freq.current:
+            cpu_freq = f"{round(freq.current/1000,2)} GHz"
     except:
         pass
-    await CallbackQuery.edit_message_text(_["gstats_1"].format(app.mention))
-    p_core = psutil.cpu_count(logical=False)
-    t_core = psutil.cpu_count(logical=True)
-    ram = str(round(psutil.virtual_memory().total / (1024.0**3))) + " ɢʙ"
-    try:
-        cpu_freq = psutil.cpu_freq().current
-        if cpu_freq >= 1000:
-            cpu_freq = f"{round(cpu_freq / 1000, 2)}ɢʜᴢ"
-        else:
-            cpu_freq = f"{round(cpu_freq, 2)}ᴍʜᴢ"
-    except:
-        cpu_freq = "ғᴀɪʟᴇᴅ ᴛᴏ ғᴇᴛᴄʜ"
+
     hdd = psutil.disk_usage("/")
-    total = hdd.total / (1024.0**3)
-    used = hdd.used / (1024.0**3)
-    free = hdd.free / (1024.0**3)
-    call = await mongodb.command("dbstats")
-    datasize = call["dataSize"] / 1024
-    storage = call["storageSize"] / 1024
-    served_chats = len(await get_served_chats())
-    served_users = len(await get_served_users())
+    total = round(hdd.total / (1024.0**3), 2)
+    used = round(hdd.used / (1024.0**3), 2)
+    free = round(hdd.free / (1024.0**3), 2)
+
+    try:
+        call = await mongodb.command("dbstats")
+        datasize = round(call.get("dataSize", 0) / 1024, 2)
+        storage = round(call.get("storageSize", 0) / 1024, 2)
+        collections = call.get("collections", 0)
+        objects = call.get("objects", 0)
+    except:
+        datasize = storage = collections = objects = 0
+
     text = _["gstats_5"].format(
         app.mention,
         len(ALL_MODULES),
@@ -117,26 +169,30 @@ async def bot_stats(client, CallbackQuery, _):
         ram,
         p_core,
         t_core,
-        cpu_freq,
+        f"{cpu_freq} ({cpu_percent}%)",
         pyver.split()[0],
         pyrover,
         pytgver,
-        str(total)[:4],
-        str(used)[:4],
-        str(free)[:4],
+        total,
+        used,
+        free,
         served_chats,
         served_users,
         len(BANNED_USERS),
-        len(await get_sudoers()),
-        str(datasize)[:6],
+        sudoers_count,
+        datasize,
         storage,
-        call["collections"],
-        call["objects"],
+        collections,
+        objects,
     )
-    med = InputMediaPhoto(media=config.STATS_IMG_URL, caption=text)
+
+    graph = await generate_cpu_graph()
+
     try:
-        await CallbackQuery.edit_message_media(media=med, reply_markup=upl)
-    except MessageIdInvalid:
-        await CallbackQuery.message.reply_photo(
-            photo=config.STATS_IMG_URL, caption=text, reply_markup=upl
+        await query.message.reply_photo(
+            photo=graph,
+            caption=text,
+            reply_markup=upl,
         )
+    except MessageIdInvalid:
+        pass
