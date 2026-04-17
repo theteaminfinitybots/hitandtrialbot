@@ -3,190 +3,216 @@ from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from collections import defaultdict
 import random
+import asyncio
 
 games = {}
-leaderboards = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+leaderboards = defaultdict(lambda: defaultdict(int))
 
 MAX_PLAYERS = 6
-STARTING_HP = 5
+START_HP = 5
+
 MODES = ["Battle Royale", "Shootout", "Zombie Survival", "Tank War", "Space Shooter", "Battle Cards"]
 PREFIXES = ["/", "!", "."]
 
+
+# ---------------- START MENU ----------------
 @app.on_message(filters.command("warzone", prefixes=PREFIXES) & filters.group)
 async def start_warzone(client, message: Message):
-    chat_id = message.chat.id
     keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(mode, callback_data=f"warzone_mode:{mode}")] for mode in MODES]
+        [[InlineKeyboardButton(f"⚔️ {mode}", callback_data=f"wz_mode:{mode}")] for mode in MODES]
     )
+
     await message.reply_text(
-        "🔥 Welcome to Warzone Mini-Games! Choose a game mode:",
+        "🔥 𝖶𝖠𝖱𝖹𝖮𝖭𝖤 𝖬𝖨𝖭𝖨-𝖠𝖱𝖢𝖠𝖣𝖤 🔥\n\nSelect your battlefield:",
         reply_markup=keyboard
     )
 
+
+# ---------------- CALLBACK HANDLER ----------------
 @app.on_callback_query()
-async def warzone_callbacks(client, callback_query: CallbackQuery):
-    chat_id = callback_query.message.chat.id
-    user = callback_query.from_user
-    data = callback_query.data
+async def warzone_cb(client, cq: CallbackQuery):
+    user = cq.from_user
+    chat_id = cq.message.chat.id
+    data = cq.data
 
-    if data.startswith("warzone_mode:"):
+    # ---------- MODE SELECT ----------
+    if data.startswith("wz_mode:"):
         mode = data.split(":")[1]
-        if chat_id not in games:
-            games[chat_id] = {}
-        if mode in games[chat_id]:
-            return await callback_query.answer("Game already waiting!", show_alert=True)
 
-        games[chat_id][mode] = {"players": [], "started": False, "hp": {}, "round": 0}
-        join_button = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("✅ Join Game", callback_data=f"warzone_join:{mode}")]]
-        )
-        await callback_query.message.edit_text(
-            f"🎮 {mode} started! Click ✅ Join Game to participate (max {MAX_PLAYERS}).",
-            reply_markup=join_button
-        )
-        return await callback_query.answer()
+        if chat_id in games and mode in games[chat_id]:
+            return await cq.answer("Already running!", show_alert=True)
 
-    elif data.startswith("warzone_join:"):
+        games.setdefault(chat_id, {})
+        games[chat_id][mode] = {
+            "players": {},
+            "started": False,
+            "round": 0,
+            "actions": {}
+        }
+
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("🚀 Join Warzone", callback_data=f"wz_join:{mode}")]]
+        )
+
+        await cq.message.edit_text(
+            f"⚔️ {mode} READY\n\nClick join to enter battlefield (max {MAX_PLAYERS})",
+            reply_markup=keyboard
+        )
+
+        return await cq.answer()
+
+
+    # ---------- JOIN GAME ----------
+    if data.startswith("wz_join:"):
         mode = data.split(":")[1]
-        if chat_id not in games or mode not in games[chat_id]:
-            return await callback_query.answer("No such game.", show_alert=True)
+        game = games.get(chat_id, {}).get(mode)
 
-        game = games[chat_id][mode]
-        if user.id in [p.id for p in game["players"]]:
-            return await callback_query.answer("You already joined!", show_alert=True)
+        if not game:
+            return await cq.answer("No game found!", show_alert=True)
+
+        if user.id in game["players"]:
+            return await cq.answer("Already in battle!", show_alert=True)
+
         if len(game["players"]) >= MAX_PLAYERS:
-            return await callback_query.answer("Game is full!", show_alert=True)
+            return await cq.answer("Warzone full!", show_alert=True)
 
-        game["players"].append(user)
-        game["hp"][user.id] = STARTING_HP
+        game["players"][user.id] = START_HP
+
+        await cq.answer("Joined battlefield ⚔️")
 
         if len(game["players"]) < 2:
-            await callback_query.answer("Joined! Waiting for more players...")
-            await callback_query.message.edit_text(
-                f"{mode} waiting for players...\n{len(game['players'])}/{MAX_PLAYERS} joined.",
-                reply_markup=callback_query.message.reply_markup
+            await cq.message.edit_text(
+                f"{mode}\nWaiting for warriors...\n\n👥 {len(game['players'])}/{MAX_PLAYERS}"
             )
-        else:
-            game["started"] = True
-            await start_warzone_round(client, chat_id, mode, callback_query.message)
+            return
+
+        await start_round(client, cq.message, chat_id, mode)
         return
 
-    elif data.startswith("warzone_action:"):
+
+    # ---------- ACTION ----------
+    if data.startswith("wz_act:"):
         _, mode, action = data.split(":")
-        if chat_id not in games or mode not in games[chat_id]:
-            return await callback_query.answer("Game not active.", show_alert=True)
+        game = games.get(chat_id, {}).get(mode)
 
-        game = games[chat_id][mode]
-        if user.id not in [p.id for p in game["players"]]:
-            return await callback_query.answer("Not in this game!", show_alert=True)
+        if not game or not game["started"]:
+            return await cq.answer("Game not active", show_alert=True)
 
-        if "actions" not in game:
-            game["actions"] = {}
+        if user.id not in game["players"]:
+            return await cq.answer("Not in warzone!", show_alert=True)
 
         if user.id in game["actions"]:
-            return await callback_query.answer("Already acted!", show_alert=True)
+            return await cq.answer("Already acted!", show_alert=True)
 
         game["actions"][user.id] = action
-        await callback_query.answer(f"You chose {action}")
+        await cq.answer(f"{action} locked")
 
         if len(game["actions"]) == len(game["players"]):
-            await process_warzone_round(client, chat_id, mode, callback_query.message)
-        return
+            await process_round(client, cq.message, chat_id, mode)
 
 
-async def start_warzone_round(client, chat_id, mode, message):
+# ---------------- START ROUND ----------------
+async def start_round(client, message, chat_id, mode):
     game = games[chat_id][mode]
+    game["started"] = True
     game["round"] += 1
     game["actions"] = {}
 
-    hp_status = "\n".join([f"{p.mention}: {'❤️'*game['hp'][p.id]} ({game['hp'][p.id]})" for p in game["players"]])
+    hp_text = "\n".join(
+        [f"👤 <a href='tg://user?id={uid}'>{uid}</a> ❤️ {hp}"
+         for uid, hp in game["players"].items()]
+    )
 
-    buttons = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(a, callback_data=f"warzone_action:{mode}:{a}") for a in ["Attack", "Defend", "Heal"]]]
+    keyboard = InlineKeyboardMarkup(
+        [[
+            InlineKeyboardButton("⚔️ Attack", callback_data=f"wz_act:{mode}:Attack"),
+            InlineKeyboardButton("🛡 Defend", callback_data=f"wz_act:{mode}:Defend"),
+            InlineKeyboardButton("💚 Heal", callback_data=f"wz_act:{mode}:Heal")
+        ]]
     )
 
     await message.edit_text(
-        f"⚔️ {mode} - Round {game['round']}\n\nPlayers HP:\n{hp_status}\n\nChoose your action:",
-        reply_markup=buttons
+        f"🔥 ROUND {game['round']} STARTED\n\n{hp_text}\n\nChoose action:",
+        reply_markup=keyboard,
+        disable_web_page_preview=True
     )
 
 
-async def process_warzone_round(client, chat_id, mode, message):
+# ---------------- PROCESS ROUND ----------------
+async def process_round(client, message, chat_id, mode):
     game = games[chat_id][mode]
     results = []
-    players = game["players"]
+
+    players = list(game["players"].keys())
     random.shuffle(players)
 
-    for p in players:
-        action = game["actions"][p.id]
+    for uid in players:
+        action = game["actions"].get(uid)
+
+        if not action:
+            continue
 
         if action == "Attack":
-            targets = [t for t in players if t.id != p.id and game["hp"][t.id] > 0]
+            targets = [t for t in players if t != uid and game["players"][t] > 0]
             if targets:
                 target = random.choice(targets)
                 if random.random() < 0.7:
-                    game["hp"][target.id] -= 1
-                    results.append(f"{p.mention} attacked {target.mention} ✅")
+                    game["players"][target] -= 1
+                    results.append(f"⚔️ {uid} hit {target}")
                 else:
-                    results.append(f"{p.mention} attacked {target.mention} ❌")
+                    results.append(f"💥 {uid} missed")
 
         elif action == "Defend":
-            results.append(f"{p.mention} defended 🛡️")
+            results.append(f"🛡 {uid} defended")
 
         elif action == "Heal":
-            game["hp"][p.id] += 1
-            results.append(f"{p.mention} healed ❤️")
+            game["players"][uid] += 1
+            results.append(f"💚 {uid} healed")
 
-    alive_players = [p for p in players if game["hp"][p.id] > 0]
+    # remove dead
+    alive = {u: hp for u, hp in game["players"].items() if hp > 0}
+    game["players"] = alive
 
-    if len(alive_players) <= 1:
+    # WIN CONDITION
+    if len(alive) <= 1:
         text = "\n".join(results) + "\n\n"
-        if alive_players:
-            winner = alive_players[0]
-            leaderboards[chat_id][mode][winner.id] += 1
-            text += f"🏆 {winner.mention} wins the {mode}!"
+
+        if alive:
+            winner = list(alive.keys())[0]
+            leaderboards[chat_id][mode][winner] += 1
+            text += f"🏆 WINNER: {winner}"
         else:
-            text += "No one survived!"
+            text += "💀 NO SURVIVORS"
 
         await message.edit_text(text)
         del games[chat_id][mode]
         return
 
-    hp_status = "\n".join([f"{p.mention}: {'❤️'*game['hp'][p.id]} ({game['hp'][p.id]})" for p in alive_players])
-
-    buttons = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(a, callback_data=f"warzone_action:{mode}:{a}") for a in ["Attack", "Defend", "Heal"]]]
-    )
-
-    await message.edit_text(
-        f"⚔️ {mode} - Round {game['round']}\n\nResults:\n" +
-        "\n".join(results) +
-        "\n\nPlayers HP:\n" +
-        hp_status +
-        "\n\nChoose next action:",
-        reply_markup=buttons
-    )
-
-    game["players"] = alive_players
+    await start_round(client, message, chat_id, mode)
 
 
+# ---------------- LEADERBOARD ----------------
 @app.on_message(filters.command("warlead", prefixes=PREFIXES) & filters.group)
 async def warzone_leaderboard(client, message: Message):
     chat_id = message.chat.id
 
     if chat_id not in leaderboards:
-        return await message.reply_text("No games played yet!")
+        return await message.reply_text("No warzone data found")
 
-    text = "🏆 Warzone Leaderboards 🏆\n\n"
+    text = "🏆 𝖶𝖠𝖱𝖹𝖮𝖭𝖤 𝖫𝖤𝖠𝖣𝖤𝖱𝖡𝖮𝖠𝖱𝖣 🏆\n\n"
 
     for mode in MODES:
-        if leaderboards[chat_id][mode]:
-            text += f"{mode}\n"
-            sorted_players = sorted(leaderboards[chat_id][mode].items(), key=lambda x: x[1], reverse=True)
+        data = leaderboards[chat_id].get(mode, {})
+        if not data:
+            continue
 
-            for i, (user_id, wins) in enumerate(sorted_players[:10], 1):
-                text += f"{i}. [User](tg://user?id={user_id}) - {wins} wins\n"
+        text += f"⚔️ {mode}\n"
 
-            text += "\n"
+        sorted_data = sorted(data.items(), key=lambda x: x[1], reverse=True)
+
+        for i, (uid, wins) in enumerate(sorted_data[:10], 1):
+            text += f"{i}. <a href='tg://user?id={uid}'>Player</a> - {wins} wins\n"
+
+        text += "\n"
 
     await message.reply_text(text, disable_web_page_preview=True)
