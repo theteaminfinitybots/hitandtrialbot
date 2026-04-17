@@ -96,18 +96,18 @@ autoclean = []
 confirmer = {}
 
 START_IMG_URL = getenv("START_IMG_URL", "https://graph.org/file/d101f6b200d0fbf530e0d-fb8b944e24c2e63d89.jpg")
-START_VIDEO_URL = getenv("START_VIDEO_URL", "https://files.catbox.moe/ty42li.mp4")
-PING_IMG_URL = getenv("PING_IMG_URL", "https://files.catbox.moe/0ehtgk.jpg")
-PLAYLIST_IMG_URL = "https://files.catbox.moe/2m6yep.jpg"
-STATS_IMG_URL = "https://files.catbox.moe/0ehtgk.jpg"
-TELEGRAM_AUDIO_URL = "https://files.catbox.moe/opavqw.jpg"
-TELEGRAM_VIDEO_URL = "https://files.catbox.moe/0ehtgk.jpg"
-STREAM_IMG_URL = "https://files.catbox.moe/opavqw.jpg"
-SOUNCLOUD_IMG_URL = "https://files.catbox.moe/opavqw.jpg"
-YOUTUBE_IMG_URL = "https://files.catbox.moe/0ehtgk.jpg"
-SPOTIFY_ARTIST_IMG_URL = "https://files.catbox.moe/0ehtgk.jpg"
-SPOTIFY_ALBUM_IMG_URL = "https://files.catbox.moe/opavqw.jpg"
-SPOTIFY_PLAYLIST_IMG_URL = "https://files.catbox.moe/0ehtgk.jpg"
+START_VIDEO_URL = getenv("START_VIDEO_URL", "https://graph.org/file/29d71d09801ca0ae55cd8-4832d851713ae41c8f.mp4")
+PING_IMG_URL = getenv("PING_IMG_URL", "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg")
+PLAYLIST_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+STATS_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+TELEGRAM_AUDIO_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+TELEGRAM_VIDEO_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+STREAM_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+SOUNCLOUD_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+YOUTUBE_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+SPOTIFY_ARTIST_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+SPOTIFY_ALBUM_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
+SPOTIFY_PLAYLIST_IMG_URL = "https://graph.org/file/873eecb8fcf46923c0a97-09d4c34beb367878a5.jpg"
 
 
 def time_to_seconds(time):
