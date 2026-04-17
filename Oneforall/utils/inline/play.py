@@ -19,8 +19,7 @@ def track_markup(_, videoid, user_id, channel, fplay):
             ),
         ],
         [
-            InlineKeyboardButton("📥ᴘʀᴏᴍᴏ📥", url="https://t.me/scriptyxx"),
-            InlineKeyboardButton("💗ɢʀᴏᴜᴘ ᴄʜᴀᴛ💗", url="https://t.me/theinfinity_support"),
+            InlineKeyboardButton("⌯ᴜᴘᴘᴇʀᴍᴏᴏɴ ᴛᴜɴᴇs⌯", url="https://uppermooninfinity.jo3.org")
         ],
         [
             InlineKeyboardButton(
@@ -70,10 +69,9 @@ def stream_markup_timer(_, vidid, chat_id, played, dur):
             InlineKeyboardButton(text="▷", callback_data=f"ADMIN Resume|{chat_id}"),
             InlineKeyboardButton(text="↻", callback_data=f"ADMIN Replay|{chat_id}"),
             InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
-        ],
+        ],        
         [
-            InlineKeyboardButton("📥ᴘʀᴏᴍᴏ📥", url="https://t.me/scriptyxx"),
-            InlineKeyboardButton("💗ɢʀᴏᴜᴘ ᴄʜᴀᴛ💗", url="https://t.me/theinfinity_suppprt"),
+            InlineKeyboardButton("⌯ᴜᴘᴘᴇʀᴍᴏᴏɴ ᴛᴜɴᴇs⌯", url="https://uppermooninfinity.jo3.org")
         ],
         [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")],
     ]
@@ -111,8 +109,7 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
             ),
         ],
         [
-            InlineKeyboardButton("📥ᴘʀᴏᴍᴏ📥", url="https://t.me/cyber_github"),
-            InlineKeyboardButton("💗ɢʀᴏᴜᴘ ᴄʜᴀᴛ💗", url="https://t.me/snowy_hometown"),
+            InlineKeyboardButton("⌯ᴜᴘᴘᴇʀᴍᴏᴏɴ ᴛᴜɴᴇs⌯", url="https://uppermooninfinity.jo3.org")
         ],
         [
             InlineKeyboardButton(
