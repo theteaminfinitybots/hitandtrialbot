@@ -1,6 +1,6 @@
 from Oneforall import app
 from pyrogram import filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaVideo
 from collections import defaultdict
 import asyncio
 
@@ -8,9 +8,12 @@ games = {}
 leaderboards = defaultdict(lambda: defaultdict(int))
 
 PREFIXES = ["/", ".", "!"]
-OPTIONS = ["rock", "paper", "scissors"]
 
+# 🎬 VIDEOS
+START_VID = "https://graph.org/file/a151a7e059cf3c6ca36e4-513f5acef541728ac1.mp4"
 RPS_VID = "https://graph.org/file/67cbd06e1fbe457ef213d-476182eec039c155bb.mp4"
+LEADERBOARD_VID = "https://graph.org/file/a151a7e059cf3c6ca36e4-513f5acef541728ac1.mp4"
+
 
 def sc(text):
     normal = "abcdefghijklmnopqrstuvwxyz"
@@ -23,12 +26,18 @@ def sc(text):
             result += ch
     return result
 
+
+# ---------------- PANEL ----------------
 @app.on_message(filters.command("rps2", prefixes=PREFIXES) & filters.group)
 async def rps_panel(client, message):
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton("🎊 join game", callback_data="rps_join")]]
     )
-    msg = await message.reply_text(sc("rps game panel\nclick to join"), reply_markup=keyboard)
+
+    msg = await message.reply_text(
+        sc("rps game panel\nclick to join"),
+        reply_markup=keyboard
+    )
 
     games[msg.id] = {
         "players": [],
@@ -37,6 +46,8 @@ async def rps_panel(client, message):
         "started": False
     }
 
+
+# ---------------- JOIN ----------------
 @app.on_callback_query(filters.regex("^rps_join$"))
 async def join_game(client, cq):
     game = games.get(cq.message.id)
@@ -55,8 +66,10 @@ async def join_game(client, cq):
 
     if len(game["players"]) == 1:
         await cq.message.edit_text(sc("waiting for player 2"))
+
     elif len(game["players"]) == 2:
         game["started"] = True
+
         keyboard = InlineKeyboardMarkup(
             [[
                 InlineKeyboardButton("🪨", callback_data="rps2:rock"),
@@ -64,22 +77,36 @@ async def join_game(client, cq):
                 InlineKeyboardButton("✂️", callback_data="rps2:scissors")
             ]]
         )
-        await cq.message.edit_text(sc("both players joined\nchoose within 10s"), reply_markup=keyboard)
+
+        # 🎬 START VIDEO
+        await cq.message.edit_media(
+            media=InputMediaVideo(
+                media=START_VID,
+                caption=sc("game starting...\nboth players ready")
+            ),
+            reply_markup=keyboard
+        )
+
         asyncio.create_task(timeout_game(cq.message.id))
 
     await cq.answer()
 
+
+# ---------------- TIMEOUT ----------------
 async def timeout_game(msg_id):
     await asyncio.sleep(10)
+
     game = games.get(msg_id)
 
     if not game or not game["started"]:
         return
 
     if len(game["choices"]) < 2:
-        await game["message"].edit_text(sc("time up\nmatch cancelled"))
+        await game["message"].edit_caption(sc("time up\nmatch cancelled"))
         games.pop(msg_id, None)
 
+
+# ---------------- GAME PLAY ----------------
 @app.on_callback_query(filters.regex("^rps2:"))
 async def play_game(client, cq):
     game = games.get(cq.message.id)
@@ -104,27 +131,45 @@ async def play_game(client, cq):
     c1 = game["choices"][p1]
     c2 = game["choices"][p2]
 
+    u1 = await client.get_users(p1)
+    u2 = await client.get_users(p2)
+
+    name1 = f"[{u1.first_name}](tg://user?id={p1})"
+    name2 = f"[{u2.first_name}](tg://user?id={p2})"
+
     if c1 == c2:
-        result = sc("draw")
+        winner_text = sc("draw")
+
     elif (c1 == "rock" and c2 == "scissors") or \
          (c1 == "paper" and c2 == "rock") or \
          (c1 == "scissors" and c2 == "paper"):
-        result = sc("player 1 wins")
+
         leaderboards[cq.message.chat.id][p1] += 1
+        winner_text = f"🏆 {name1} {sc('won the game')}"
+
     else:
-        result = sc("player 2 wins")
         leaderboards[cq.message.chat.id][p2] += 1
+        winner_text = f"🏆 {name2} {sc('won the game')}"
 
     text = (
-        f"{sc('player 1')} : {c1}\n"
-        f"{sc('player 2')} : {c2}\n\n"
-        f"{result}"
+        f"{name1} : {sc(c1)}\n"
+        f"{name2} : {sc(c2)}\n\n"
+        f"{winner_text}"
     )
 
-    await cq.message.edit_text(text)
+    # 🎮 ONGOING VIDEO ALWAYS STAYS
+    await cq.message.edit_media(
+        media=InputMediaVideo(
+            media=RPS_VID,
+            caption=text
+        )
+    )
+
     games.pop(cq.message.id, None)
     await cq.answer()
 
+
+# ---------------- LEADERBOARD ----------------
 @app.on_message(filters.command("rpslead", prefixes=PREFIXES) & filters.group)
 async def leaderboard(client, message):
     chat_id = message.chat.id
@@ -141,11 +186,13 @@ async def leaderboard(client, message):
     text = sc("rps leaderboard") + "\n\n"
 
     for i, (user_id, wins) in enumerate(sorted_users[:10], 1):
-        text += f"{i}. [user](tg://user?id={user_id}) - {wins}\n"
+        user = await client.get_users(user_id)
+        mention = f"[{user.first_name}](tg://user?id={user_id})"
+        text += f"{i}. {mention} - {wins}\n"
 
     await message.reply_video(
-        video=RPS_VID,
+        video=LEADERBOARD_VID,
         caption=text,
         has_spoiler=True,
-        parse_mode="markdown"
-                                    )
+        parse_mode="Markdown"
+        )
