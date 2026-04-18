@@ -5,7 +5,7 @@ from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from pymongo import MongoClient
 
-from EsproMusic import app
+from Oneforall import app
 from config import MONGO_DB_URI
 
 # ================== DB ==================
