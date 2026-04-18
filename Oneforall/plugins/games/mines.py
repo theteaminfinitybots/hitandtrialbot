@@ -1,4 +1,4 @@
-# ================== MINES + DAILY SYSTEM ==================
+# ================== MINES + DAILY + PAY ==================
 
 import random
 import time
@@ -9,11 +9,6 @@ from pymongo import MongoClient
 from Oneforall import app
 from config import MONGO_DB_URI
 
-# ================== DB ==================
-mongo = MongoClient(MONGO_DB_URI)
-db = mongo["musicbot"]
-users_db = db["users"]
-
 # ================== CONFIG ==================
 GRID = 4
 MINES = 4
@@ -22,6 +17,13 @@ COOLDOWN = 86400
 REWARDS = [500, 1000, 2000, 3200]
 MULTIPLIER = [1.0, 1.2, 1.5, 2.0, 3.0, 5.0]
 
+NO_BALANCE_VIDEO = "https://graph.org/file/384f9cbde98284c4ef320-d03d1daec0a682bc50.mp4"  # ← replace
+
+# ================== DB ==================
+mongo = MongoClient(MONGO_DB_URI)
+db = mongo["musicbot"]
+users_db = db["users"]
+
 # ================== MEMORY ==================
 games = {}
 
@@ -29,11 +31,7 @@ games = {}
 def get_user(user_id):
     user = users_db.find_one({"user_id": user_id})
     if not user:
-        user = {
-            "user_id": user_id,
-            "coins": 1000,
-            "last_daily": 0
-        }
+        user = {"user_id": user_id, "coins": 1000, "last_daily": 0}
         users_db.insert_one(user)
     return user
 
@@ -44,16 +42,12 @@ def update_user(user_id, coins=None, last_daily=None):
     if last_daily is not None:
         update["last_daily"] = last_daily
 
-    users_db.update_one(
-        {"user_id": user_id},
-        {"$set": update},
-        upsert=True
-    )
+    users_db.update_one({"user_id": user_id}, {"$set": update}, upsert=True)
 
 # ================== TIME ==================
-def format_time(seconds):
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
+def format_time(sec):
+    h = sec // 3600
+    m = (sec % 3600) // 60
     return f"{h}h {m}m"
 
 # ================== BOARD ==================
@@ -66,8 +60,8 @@ def gen_board():
 # ================== UI ==================
 def board_ui(game_id, revealed={}, show_all=False):
     game = games[game_id]
-
     buttons = []
+
     for i in range(GRID * GRID):
         if show_all:
             text = game["board"][i]
@@ -102,55 +96,79 @@ async def balance(_, message: Message):
 # ================== DAILY ==================
 @app.on_message(filters.command("daily"))
 async def daily(_, message: Message):
-    user_id = message.from_user.id
-    user = get_user(user_id)
+    user = get_user(message.from_user.id)
 
     now = int(time.time())
-    last = user.get("last_daily", 0)
-
-    if now - last < COOLDOWN:
-        remaining = COOLDOWN - (now - last)
+    if now - user["last_daily"] < COOLDOWN:
         return await message.reply(
-            f"⏳ ᴀʟʀᴇᴀᴅʏ ᴄʟᴀɪᴍᴇᴅ\nᴛʀʏ ᴀɢᴀɪɴ ɪɴ {format_time(remaining)}"
+            f"⏳ ᴛʀʏ ᴀɢᴀɪɴ ɪɴ {format_time(COOLDOWN - (now - user['last_daily']))}"
         )
 
     reward = random.choice(REWARDS)
-    new_balance = user["coins"] + reward
-
-    update_user(user_id, coins=new_balance, last_daily=now)
-
-    await message.reply(
-        f"🎁 ᴅᴀɪʟʏ ᴄʟᴀɪᴍᴇᴅ\n💰 +{reward}\n🏦 ʙᴀʟᴀɴᴄᴇ: {new_balance}"
+    update_user(
+        message.from_user.id,
+        coins=user["coins"] + reward,
+        last_daily=now
     )
 
-# ================== START ==================
-@app.on_message(filters.command("mines") & filters.group)
+    await message.reply(f"🎁 +{reward} ᴄᴏɪɴs")
+
+# ================== PAY ==================
+@app.on_message(filters.command("pay") & filters.group)
+async def pay(_, message: Message):
+    if not message.reply_to_message:
+        return await message.reply("ʀᴇᴘʟʏ ᴛᴏ ᴜsᴇʀ")
+
+    try:
+        amount = int(message.command[1])
+    except:
+        return await message.reply("ᴜsᴀɢᴇ: /pay 100")
+
+    sender = get_user(message.from_user.id)
+
+    if sender["coins"] < amount:
+        return await message.reply_video(
+            NO_BALANCE_VIDEO,
+            caption="ᴀᴀʜᴇ sʜᴜᴛ ᴜᴘ ʙᴀᴋᴀ ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴇɴᴏᴜɢʜ ʙᴀʟᴀɴᴄᴇ"
+        )
+
+    receiver_id = message.reply_to_message.from_user.id
+
+    update_user(message.from_user.id, coins=sender["coins"] - amount)
+
+    receiver = get_user(receiver_id)
+    update_user(receiver_id, coins=receiver["coins"] + amount)
+
+    await message.reply(f"💸 ᴛʀᴀɴsғᴇʀʀᴇᴅ {amount}")
+
+# ================== MINES START ==================
+@app.on_message(filters.command("mines"))
 async def start_mines(_, message: Message):
-    user_id = message.from_user.id
-    args = message.text.split()
+
+    args = message.command
 
     if len(args) < 2:
-        return await message.reply("ᴜsᴀɢᴇ: /mines <bet>")
+        return await message.reply("ᴜsᴀɢᴇ: /mines 100")
 
     try:
         bet = int(args[1])
     except:
         return await message.reply("ɪɴᴠᴀʟɪᴅ ʙᴇᴛ")
 
-    user = get_user(user_id)
-
-    if bet <= 0:
-        return await message.reply("ʙᴇᴛ ᴍᴜsᴛ ʙᴇ > 0")
+    user = get_user(message.from_user.id)
 
     if user["coins"] < bet:
-        return await message.reply("ɴᴏᴛ ᴇɴᴏᴜɢʜ ᴄᴏɪɴs")
+        return await message.reply_video(
+            NO_BALANCE_VIDEO,
+            caption="ᴀᴀʜᴇ sʜᴜᴛ ᴜᴘ ʙᴀᴋᴀ ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴇɴᴏᴜɢʜ ʙᴀʟᴀɴᴄᴇ"
+        )
 
-    update_user(user_id, coins=user["coins"] - bet)
+    update_user(message.from_user.id, coins=user["coins"] - bet)
 
     game_id = f"{message.chat.id}_{message.id}"
 
     games[game_id] = {
-        "user": user_id,
+        "user": message.from_user.id,
         "board": gen_board(),
         "revealed": {},
         "safe": 0,
@@ -158,9 +176,8 @@ async def start_mines(_, message: Message):
         "over": False
     }
 
-    await message.reply_photo(
-        photo="https://files.catbox.moe/0n0qrm.jpg",
-        caption=f"💣 ᴍɪɴᴇs\nʙᴇᴛ: {bet}",
+    await message.reply(
+        f"💣 ᴍɪɴᴇs\nʙᴇᴛ: {bet}",
         reply_markup=board_ui(game_id)
     )
 
@@ -176,31 +193,30 @@ async def click(_, query: CallbackQuery):
     game = games[game_id]
 
     if query.from_user.id != game["user"]:
-        return await query.answer("ɴᴏᴛ ʏᴏᴜʀ ɢᴀᴍᴇ", True)
+        return await query.answer("ɴᴏᴛ ʏᴏᴜʀ", True)
 
     if game["over"]:
-        return await query.answer("ɢᴀᴍᴇ ᴏᴠᴇʀ", True)
-
-    if idx in game["revealed"]:
-        return await query.answer()
-
-    value = game["board"][idx]
-    game["revealed"][idx] = value
-
-    if value == "💣":
-        game["over"] = True
-        await query.message.edit_caption(
-            "💣 ʏᴏᴜ ʟᴏsᴛ!",
-            reply_markup=board_ui(game_id, show_all=True)
-        )
         return
 
-    game["safe"] += 1
-    multi = MULTIPLIER[min(game["safe"] - 1, len(MULTIPLIER)-1)]
-    potential = int(game["bet"] * multi)
+    if idx in game["revealed"]:
+        return
 
-    await query.message.edit_caption(
-        f"✅ sᴀғᴇ\nx{multi}\n💰 {potential}",
+    val = game["board"][idx]
+    game["revealed"][idx] = val
+
+    if val == "💣":
+        game["over"] = True
+        return await query.message.edit_text(
+            "💣 ʟᴏsᴛ",
+            reply_markup=board_ui(game_id, show_all=True)
+        )
+
+    game["safe"] += 1
+    multi = MULTIPLIER[min(game["safe"]-1, len(MULTIPLIER)-1)]
+    reward = int(game["bet"] * multi)
+
+    await query.message.edit_text(
+        f"✅ sᴀғᴇ\nx{multi}\n💰 {reward}",
         reply_markup=board_ui(game_id, game["revealed"])
     )
 
@@ -209,18 +225,11 @@ async def click(_, query: CallbackQuery):
 async def cashout(_, query: CallbackQuery):
     _, game_id = query.data.split("_")
 
-    if game_id not in games:
-        return await query.answer("ᴇxᴘɪʀᴇᴅ", True)
+    game = games.get(game_id)
+    if not game:
+        return
 
-    game = games[game_id]
-
-    if query.from_user.id != game["user"]:
-        return await query.answer("ɴᴏᴛ ʏᴏᴜʀ", True)
-
-    if game["safe"] == 0:
-        return await query.answer("ɴᴏ ʀᴇᴡᴀʀᴅ", True)
-
-    multi = MULTIPLIER[min(game["safe"] - 1, len(MULTIPLIER)-1)]
+    multi = MULTIPLIER[min(game["safe"]-1, len(MULTIPLIER)-1)]
     reward = int(game["bet"] * multi)
 
     user = get_user(game["user"])
@@ -228,7 +237,7 @@ async def cashout(_, query: CallbackQuery):
 
     game["over"] = True
 
-    await query.message.edit_caption(
+    await query.message.edit_text(
         f"💰 ᴄᴀsʜᴏᴜᴛ\n+{reward}",
         reply_markup=board_ui(game_id, show_all=True)
     )
@@ -238,10 +247,9 @@ async def cashout(_, query: CallbackQuery):
 async def restart(_, query: CallbackQuery):
     _, game_id = query.data.split("_")
 
-    if game_id not in games:
-        return await query.answer()
-
-    game = games[game_id]
+    game = games.get(game_id)
+    if not game:
+        return
 
     games[game_id] = {
         "user": game["user"],
@@ -252,7 +260,7 @@ async def restart(_, query: CallbackQuery):
         "over": False
     }
 
-    await query.message.edit_caption(
-        f"🔄 ʀᴇsᴛᴀʀᴛ\nʙᴇᴛ: {game['bet']}",
+    await query.message.edit_text(
+        "🔄 ʀᴇsᴛᴀʀᴛᴇᴅ",
         reply_markup=board_ui(game_id)
-            )
+        )
